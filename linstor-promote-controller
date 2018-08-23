@@ -1,0 +1,136 @@
+#!/bin/bash
+clear
+echo "Which node will become the PRIMARY Linstor Controller? [pve1,pve2,pve3]"
+drbdadm status linstordb
+read PRIMARY
+     if [ $PRIMARY != pve1 ] && [ $PRIMARY != pve2 ] && [ $PRIMARY != pve3 ]; then
+     echo "That was not a valid value." && exit
+else
+     ssh $PRIMARY systemctl unmask linstor-controller.service
+     ssh $PRIMARY systemctl unmask mnt-linstordb.mount
+     clear
+     echo "Done. Node $PRIMARY is now the active LINSTOR controller node.See below.."
+     ssh $PRIMARY systemctl status linstor-controller.service|head -n 3
+     ssh $PRIMARY systemctl status mnt-linstordb.mount|head -n 3
+fi
+     echo -n "Is that correct ? [y/n]"
+     read YN
+     case $YN in
+        Y|y) 
+          echo "That was a YES,let's move on..." ;;
+        N|n)
+          echo "Please re-run this script." && exit ;;
+        *)
+          echo "That was not a Y/N" && exit ;;
+esac
+clear
+
+if [ $PRIMARY = pve3 ]; then
+      ssh pve2 systemctl stop linstor-controller.service
+      ssh pve2 systemctl mask linstor-controller.service
+      ssh pve2 systemctl stop mnt-linstordb.mount 
+      ssh pve2 systemctl mask mnt-linstordb.mount 
+      ssh pve1 systemctl stop linstor-controller.service
+      ssh pve1 systemctl mask linstor-controller.service
+      ssh pve1 systemctl stop mnt-linstordb.mount 
+      ssh pve1 systemctl mask mnt-linstordb.mount 
+fi
+
+if [ $PRIMARY = pve2 ]; then
+      ssh pve3 systemctl stop linstor-controller.service
+      ssh pve3 systemctl mask linstor-controller.service
+      ssh pve3 systemctl stop mnt-linstordb.mount 
+      ssh pve3 systemctl mask mnt-linstordb.mount 
+      ssh pve1 systemctl stop linstor-controller.service
+      ssh pve1 systemctl mask linstor-controller.service
+      ssh pve1 systemctl stop mnt-linstordb.mount 
+      ssh pve1 systemctl mask mnt-linstordb.mount 
+fi
+
+if [ $PRIMARY = pve1 ]; then
+      ssh pve3 systemctl stop linstor-controller.service
+      ssh pve3 systemctl mask linstor-controller.service
+      ssh pve3 systemctl stop mnt-linstordb.mount 
+      ssh pve3 systemctl mask mnt-linstordb.mount 
+      ssh pve2 systemctl stop linstor-controller.service
+      ssh pve2 systemctl mask linstor-controller.service
+      ssh pve2 systemctl stop mnt-linstordb.mount 
+      ssh pve2 systemctl mask mnt-linstordb.mount 
+fi
+clear
+
+echo "Which node is currently the ACTIVE Linstor node? [pve1,pve2,pve3]"
+read ACTIVE
+     if [ $ACTIVE != pve1 ] && [ $ACTIVE != pve2 ] && [ $ACTIVE != pve3 ]; then
+     echo "That was not a valid value." && exit
+else
+     echo "Let's stop linstor-controller.service on that node.."
+     ssh $ACTIVE systemctl stop linstor-controller.service 
+     ssh $ACTIVE systemctl status linstor-controller.service|head -n 3
+fi
+     echo -n "Is that OK ? [y/n]"
+     read YN
+     case $YN in
+        Y|y) 
+          echo "That was a YES,let's move on..." ;;
+        N|n)
+          echo "Please re-run this script." && exit ;;
+        *)
+          echo "That was not a Y/N" && exit ;;
+esac
+clear
+
+echo "Let's unmount Linstor database directory..."
+     ssh $ACTIVE systemctl stop mnt-linstordb.mount
+echo "Let's make LinstorDB DRBD resource secondary..."
+     ssh $ACTIVE drbdadm secondary linstordb
+echo "Please check that the directory is now empty..."
+     ssh $ACTIVE df -h /mnt/linstordb
+echo -n "All good? [y/n]"
+     read YN
+     case $YN in
+        Y|y)
+          echo "That was a YES,let's move on..." ;;
+        N|n)
+          echo "Please re-run this script." && exit ;;
+        *)
+          echo "That was not a Y/N" && exit ;;
+esac
+clear
+
+echo -n "Shall I start Linstor controller on the new PRIMARY node? [y/n]"
+read YN
+     case $YN in
+        Y|y)
+          echo "That was a YES,let's move on..." ;;
+        N|n)
+          echo "Please re-run this script." && exit ;;
+        *)
+          echo "That was not a Y/N" && exit ;;
+esac
+clear
+
+ssh $PRIMARY systemctl unmask mnt-linstordb.mount
+ssh $PRIMARY systemctl start mnt-linstordb.mount
+ssh $PRIMARY systemctl unmask linstor-controller.service
+ssh $PRIMARY systemctl start linstor-controller.service
+ssh $PRIMARY systemctl status linstor-controller.service|head -n 3
+ssh $PRIMARY systemctl status mnt-linstordb.mount|head -n 3
+
+echo -n "Done, does it look OK? [y/n]"
+read YN
+     case $YN in
+        Y|y)
+          echo "That was a YES,let's move on..." ;;
+        N|n)
+          echo "Please re-run this script." && exit ;;
+        *)
+          echo "That was not a Y/N" && exit ;;
+esac
+clear
+echo "All done. Don't forget to update the /etc/pve/storage.cfg file and LS_CONTROLLERS env variable according to the new settings."
+echo "Summary:"
+echo "The new ACTIVE node is: $PRIMARY"
+drbdadm status linstordb
+sleep 3
+linstor --controllers $PRIMARY n l
