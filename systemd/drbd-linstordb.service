@@ -1,0 +1,15 @@
+[Unit]
+Description=Activate Linstor DRBD database volume
+After=lvm2-lvmetad.socket lvm2-lvmetad.service
+After=zfs.target zfs-import.target
+After=networking.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/drbdadm up linstordb
+ExecStop=/usr/sbin/drbdadm down linstordb
+RemainAfterExit=yes
+
+[Install]
+WantedBy=muti-user.target
+WantedBy=linstor-controller.service

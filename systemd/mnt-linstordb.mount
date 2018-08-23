@@ -1,0 +1,14 @@
+[Unit]
+Description=Mount LINSTOR database directory
+After=zfs-import.target
+After=zfs.target
+
+[Mount]
+What=/dev/drbd/by-res/linstordb/0
+Where=/mnt/linstordb
+Type=ext4
+Options=nofail
+
+[Install]
+RequiredBy=linstor-controller
+WantedBy=multi-user.target
